@@ -1,5 +1,7 @@
 #include <math.h>
 #include <iostream>
+#include <memory>
+#include <string>
 #include <cstdlib>
 #include <pthread.h>
 #include <unistd.h>
@@ -7,9 +9,13 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdarg.h>
+#include <signal.h>
 
 #define PNG_DEBUG 3
 #include <png.h>
+
+#include <grpcpp/grpcpp.h>
+#include "ulens.grpc.pb.h"
 
 int x, y;
 
@@ -20,7 +26,7 @@ png_byte bit_depth;
 png_structp png_ptr;
 png_infop info_ptr;
 int number_of_passes;
-png_bytep * row_pointers;
+png_bytep * row_pointers; 
 
 void abort_(const char * s, ...){
 	va_list args;
@@ -31,7 +37,7 @@ void abort_(const char * s, ...){
 	abort();
 }
 
-void write_png_file(char* file_name)
+void write_png_file(const char* file_name)
 {
 	/* create file */
 	FILE *fp = fopen(file_name, "wb");
@@ -133,33 +139,50 @@ void illuminate_voxel(float x, float y, float z, float color){
 		}
 	}
 }
+
+float 		thread_args[512][5]; // [4] is the threadid
+bool 			thread_active[512]; 
+pthread_t 	threads[512]; 
+int 			thread_next = 0; 
+
 void *illuminate_voxel_thread(void* t){
 	float* a = (float*)t; 
+	int threadid = (int)a[4];  
 	illuminate_voxel(a[0], a[1], a[2], a[3]); 
+	thread_active[threadid] = false; 
 	pthread_exit(NULL); 
 }
 /* illuminate voxel is pretty inefficient -- we can of course invert this mapping
  * with a coarse discretization along the z-axis.  But maybe later, this is quite fast now w/threading */
-int main(void){
-	//fill the LUT. 
-	for(int y = 0; y < 1600; y++){
-		for(int x = 0; x < 2560; x++){
-			float ox,oy,ax,ay; 
-			float px = x; 
-			float py = y; 
-			pixel_to_4d(px, py, ox, oy, ax, ay); 
-			p4d_array[y][x][0] = ox; 
-			p4d_array[y][x][1] = oy; 
-			p4d_array[y][x][2] = ax; 
-			p4d_array[y][x][3] = ay; 
+void enqueue_illuminate_voxel(float x, float y, float z, float c){
+	int h = thread_next;
+	if(thread_active[h]){
+		int cnt = 30; 
+		while(cnt > 0 && thread_active[h]){
+			sleep(1);
+			cnt--; 
 		}
+		if(thread_active[h]) return; 
 	}
-	// clear the image. 
-	for(int y = 0; y < 1600; y++){
-		for(int x = 0; x < 2560; x++){
-			gimage[y][x] = 0;
-		}
-	}
+	thread_args[h][0] = x; 
+	thread_args[h][1] = y; 
+	thread_args[h][2] = z; 
+	thread_args[h][3] = c; 
+	thread_args[h][3] = (float)h; 
+	thread_active[h] = true; 
+	
+	pthread_attr_t attr;
+	pthread_attr_init(&attr);
+   pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+	pthread_create(&threads[h], &attr, 
+						illuminate_voxel_thread, (void*)(&(thread_args[h]))); 
+	pthread_attr_destroy(&attr);
+	thread_next = (thread_next+1)%512; 
+}
+
+int test_old(void){
+	// useful for development! 
+	thread_next = 0; 
 	// test illuminate voxels in parallel!
 	pthread_t threads[6 * 20]; 
 	float thread_args[6*20][4]; 
@@ -206,4 +229,102 @@ int main(void){
 	write_png_file("test.png");
 	free(row_pointers); 
 	return 0; 
+}
+
+using grpc::Server;
+using grpc::ServerBuilder;
+using grpc::ServerContext;
+using grpc::Status;
+using ulens::Illuminate;
+using ulens::IllumReq;
+using ulens::SimpleReq;
+using ulens::SimpleReply;
+using ulens::ImageReply;
+
+// Logic and data behind the server's behavior.
+class IllumServiceImpl final : public Illuminate::Service {
+	Status Illum(ServerContext* context, const IllumReq* request, SimpleReply* reply) override {
+		printf("Illuminate!\t"); 
+		printf("x %f y %f z %f\n", request->x(), request->y(), request->z()); 
+		enqueue_illuminate_voxel(request->x(), request->y(), request->z(), request->c()); 
+		reply->set_msg("Illum'd");
+		return Status::OK;
+	}
+	Status Clear(ServerContext* context, const SimpleReq* request, SimpleReply* reply) override {
+		for(int y = 0; y < 1600; y++){
+			for(int x = 0; x < 2560; x++){
+				gimage[y][x] = 0;
+			}
+		}
+		std::string prefix("Cleared ");
+		reply->set_msg(prefix + request->msg());
+		return Status::OK;
+	}
+	Status Get(ServerContext* context, const SimpleReq* request, ImageReply* reply) override {
+		// wait for other threads to complete, if need be. 
+		int cnt = 30*20; 
+		bool done = false; 
+		while(!done && cnt > 0){
+			done = true; 
+			for(int i=0; i<512; i++){
+				if(thread_active[i]){
+					done = false; 
+					break; 
+				}
+			}
+			cnt--; 
+			if(!done) usleep(50000); 
+		}
+		reply->set_w(2560); 
+		reply->set_h(1600); 
+		reply->set_data((void*)(gimage), 2560*1600); 
+		return Status::OK;
+	}
+};
+
+void RunServer() {
+  std::string server_address("0.0.0.0:50043");
+  IllumServiceImpl service;
+
+  ServerBuilder builder;
+  // Listen on the given address without any authentication mechanism.
+  builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
+  // Register "service" as the instance through which we'll communicate with
+  // clients. In this case it corresponds to an *synchronous* service.
+  builder.RegisterService(&service);
+  // Finally assemble the server.
+  std::unique_ptr<Server> server(builder.BuildAndStart());
+  std::cout << "Server listening on " << server_address << std::endl;
+  // Wait for the server to shutdown. Note that some other thread must be
+  // responsible for shutting down the server for this call to ever return.
+  server->Wait();
+}
+
+int main(int argc, char** argv) {
+	//fill the LUT. 
+	for(int y = 0; y < 1600; y++){
+		for(int x = 0; x < 2560; x++){
+			float ox,oy,ax,ay; 
+			float px = x; 
+			float py = y; 
+			pixel_to_4d(px, py, ox, oy, ax, ay); 
+			p4d_array[y][x][0] = ox; 
+			p4d_array[y][x][1] = oy; 
+			p4d_array[y][x][2] = ax; 
+			p4d_array[y][x][3] = ay; 
+		}
+	}
+	printf("LUT filled.\n"); 
+	// clear the image. 
+	for(int y = 0; y < 1600; y++){
+		for(int x = 0; x < 2560; x++){
+			gimage[y][x] = ((x+y) & 0x1)*255; //checkerboard.
+		}
+	}
+	//clear the thread state. 
+	for(int i=0; i<512; i++){
+		thread_active[i] = false; 
+	}
+	RunServer();
+	return 0;
 }
