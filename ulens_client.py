@@ -10,7 +10,7 @@ import ulens_pb2_grpc
 
 
 def run():
-	with grpc.insecure_channel('localhost:50043') as channel:
+	with grpc.insecure_channel('10.8.3.29:50043') as channel:
 		stub = ulens_pb2_grpc.IlluminateStub(channel)
 		
 		response = stub.Clear(ulens_pb2.SimpleReq(msg="doit"))
