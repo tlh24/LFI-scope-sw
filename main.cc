@@ -133,7 +133,12 @@ void illuminate_voxel(float x, float y, float z, float color){
 			float by = oy + (ay*z); 
 			if(((bx-0.35) <= x) && ((bx+0.35) >= x)){
 				if(((by-0.35) <= y) && ((by+0.35) >= y)){
-					gimage[py][px] = col; 
+					//all this should really be in an 'atomic' block.. 
+					float a = gimage[py][px];
+					a += col; 
+					a = a > 255.0 ? 255.0 : a; 
+					a = a < 0.0 ? 0.0 : a;
+					gimage[py][px] = (unsigned char)a; 
 				}
 			}
 		}
@@ -286,7 +291,7 @@ class IllumServiceImpl final : public Illuminate::Service {
 };
 
 void RunServer() {
-  std::string server_address("0.0.0.0:80");
+  std::string server_address("0.0.0.0:50043");
   IllumServiceImpl service;
 
   ServerBuilder builder;
