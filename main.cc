@@ -168,7 +168,7 @@ void enqueue_illuminate_voxel(float x, float y, float z, float c){
 	thread_args[h][1] = y; 
 	thread_args[h][2] = z; 
 	thread_args[h][3] = c; 
-	thread_args[h][3] = (float)h; 
+	thread_args[h][4] = (float)h; 
 	thread_active[h] = true; 
 	
 	pthread_attr_t attr;
@@ -273,7 +273,10 @@ class IllumServiceImpl final : public Illuminate::Service {
 				}
 			}
 			cnt--; 
-			if(!done) usleep(50000); 
+			if(!done){ 
+				printf("Not done yet\n"); 
+				usleep(50000); 
+			}
 		}
 		reply->set_w(2560); 
 		reply->set_h(1600); 
