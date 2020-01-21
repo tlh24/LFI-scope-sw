@@ -15,7 +15,12 @@ ulens.pb.cc:
 	protoc ulens.proto --cpp_out=.
 	protoc ulens.proto --plugin=protoc-gen-grpc=`which grpc_cpp_plugin` --grpc_out=.
 	python3 -m grpc_tools.protoc --python_out=. --grpc_python_out=. \
-	--proto_path=/home/tlh24/ulens ulens.proto
+	--proto_path=. ulens.proto
 	
 clean:
 	rm -rf $(OBJS) ulens *.pb.cc *.pb.h *_pb2.py *pb2_grpc.py
+
+deps:
+	sudo apt-get install libprotobuf-dev protobuf-compiler libgrpc-dev  \
+	protobuf-compiler-grpc pkg-config python3 python3-grpc-tools \
+	libgrpc++-dev libpng-dev python3-scipy python3-grpcio python3-grpc-tools

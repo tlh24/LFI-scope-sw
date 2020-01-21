@@ -286,7 +286,7 @@ class IllumServiceImpl final : public Illuminate::Service {
 };
 
 void RunServer() {
-  std::string server_address("0.0.0.0:50043");
+  std::string server_address("0.0.0.0:80");
   IllumServiceImpl service;
 
   ServerBuilder builder;
