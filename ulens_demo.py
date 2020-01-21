@@ -4,40 +4,16 @@ import numpy as np
 from ALP4 import *
 import time
 from PIL import Image
-import aggdraw
 import numpy
 import math
+import readchar
+import platform
 
 import grpc
 import ulens_pb2
 import ulens_pb2_grpc
 
-is_windows = False
-
-def _find_getch():
-    try:
-        import termios
-    except ImportError:
-        # Non-POSIX. Return msvcrt's (Windows') getch.
-        is_windows = True
-        import msvcrt
-        return msvcrt.getch
-
-    # POSIX system. Create and return a getch that manipulates the tty.
-    import sys, tty
-    def _getch():
-        fd = sys.stdin.fileno()
-        old_settings = termios.tcgetattr(fd)
-        try:
-            tty.setraw(fd)
-            ch = sys.stdin.read(1)
-        finally:
-            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-        return ch
-
-    return _getch
-
-getch = _find_getch()
+is_windows = platform.system() == 'Windows'
 
 def make_image(theta, imn):
 	with grpc.insecure_channel('10.8.3.29:50043') as channel:
@@ -49,7 +25,7 @@ def make_image(theta, imn):
 		for j in range(6):
 			y = float(j) * 20.0 + 10.0
 			for i in range(19):
-				x = i * 10.0 + 10.0 + j/11.7; 
+				x = i * 10.0 + 10.0 + j/13.7; 
 				z = (i-9.0) * math.sin(theta); 
 				stub.Illum(ulens_pb2.IllumReq(x=x,y=y,z=z,c=1.0))
 				if i != 9: #darken the central mode
@@ -60,9 +36,13 @@ def make_image(theta, imn):
 		print("return size", len(response.data))
 		imgData = numpy.frombuffer(response.data, dtype=numpy.dtype('S1'), count=(response.w*response.h))
 		imgData = numpy.reshape(imgData, (1600, 2560)); 
-		img = Image.fromarray(imgData, mode='L'); 
-		img.save('ulens_grpc_' + str(imn) + '.png')
+		if not is_windows:
+			# can't see it, so save a png. 
+			img = Image.fromarray(imgData, mode='L'); 
+			img.save('ulens_grpc_' + str(imn) + '.png')
 		return imgData
+
+n_images = 25
 
 if is_windows: 
 	bitDepth = 8 
@@ -71,15 +51,15 @@ if is_windows:
 	# Initialize the device
 	DMD.Initialize()
 	# Allocate the onboard memory for the image sequence
-	DMD.SeqAlloc(nbImg = 25, bitDepth = bitDepth)
+	DMD.SeqAlloc(nbImg = n_images, bitDepth = bitDepth)
 
 needhalt = False
 c = 'g'
 
-while c != 'q':
+while c != b'q':
 	theta = 0.0
 	dtheta = math.pi * 2.0 / 25.0; 
-	for imn in range(25):
+	for imn in range(n_images):
 		pix = make_image(theta, imn)
 		if imn == 0:
 			imgSeq = pix.ravel()
@@ -91,14 +71,17 @@ while c != 'q':
 		if needhalt:
 			DMD.Halt()
 		# Send the image sequence as a 1D list/array/numpy array
-		DMD.SeqPut(imgData = imgSeq.astype(int))
+		q = np.frombuffer(imgSeq, dtype=np.uint8)
+		DMD.SeqPut(imgData = q.astype(int))
 		# Set image rate to 20 Hz
 		DMD.SetTiming(illuminationTime = 50000)
 		
 		# Run the sequence in an infinite loop
 		DMD.Run()
 	needhalt = True
-	c = getch()
+	c = readchar.readchar()
+	print(c)
+
 
 if is_windows:
 	# Stop the sequence display
