@@ -181,7 +181,7 @@ void enqueue_illuminate_voxel(float x, float y, float z, float c){
    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 	pthread_create(&threads[h], &attr, 
 						illuminate_voxel_thread, (void*)(&(thread_args[h]))); 
-	pthread_attr_destroy(&attr);
+
 	thread_next = (thread_next+1)%512; 
 }
 
@@ -267,7 +267,7 @@ class IllumServiceImpl final : public Illuminate::Service {
 	}
 	Status Get(ServerContext* context, const SimpleReq* request, ImageReply* reply) override {
 		// wait for other threads to complete, if need be. 
-		int cnt = 30*20; 
+		int cnt = 30*5; 
 		bool done = false; 
 		while(!done && cnt > 0){
 			done = true; 
@@ -282,6 +282,10 @@ class IllumServiceImpl final : public Illuminate::Service {
 				printf("Not done yet\n"); 
 				usleep(50000); 
 			}
+		}
+		// clear active in case of error.. e.g. overlap.
+		for(int i=0; i<512; i++){
+			thread_active[i] = false; 
 		}
 		reply->set_w(2560); 
 		reply->set_h(1600); 
