@@ -25,14 +25,14 @@ def make_image(theta, imn):
 		for j in range(6):
 			y = float(j) * 20.0 + 10.0
 			for i in range(19):
-				x = i * 10.0 + 10.0 + j/13.7; 
+				x = i * 10.0 + 10.0; 
 				z = (i-9.0) * math.sin(theta); 
 				stub.Illum(ulens_pb2.IllumReq(x=x,y=y,z=z,c=1.0))
 				if i != 9: #darken the central mode
 					stub.Illum(ulens_pb2.IllumReq(x=x,y=y,z=0.0,c=-0.75))
 		
 		response = stub.Get(ulens_pb2.SimpleReq(msg="-"))
-		print("Get rx: ", response.w, " ", response.h)
+		print("Get rx no ", imn, ": ", response.w, " ", response.h)
 		print("return size", len(response.data))
 		imgData = numpy.frombuffer(response.data, dtype=numpy.dtype('S1'), count=(response.w*response.h))
 		imgData = numpy.reshape(imgData, (1600, 2560)); 
