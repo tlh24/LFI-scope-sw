@@ -88,7 +88,7 @@ def test_illumination():
 	img = Image.new("L", (2560,1600), color='black') 
 	d = aggdraw.Draw(img)
 	pen = aggdraw.Pen("white", 1.7)
-	for j in range(0,1):
+	for j in range(0,6):
 		y = j*20.0+10.0
 		for i in range(0,20):
 			x = i*10.0+7.0 + j/10.0
@@ -100,7 +100,7 @@ def test_illumination():
 	d.flush()
 	img.save('ulens_voxeltest.png')
 
-# test_illumination()
+test_illumination()
 
 # Load the Vialux .dll
 DMD = ALP4(version = '4.3', libDir = 'C:/Program Files/ALP-4.3/ALP-4.3 API')
