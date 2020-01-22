@@ -9,10 +9,13 @@ service Illuminate {
 }
 
 message IllumReq{
-	float x = 1; 
-	float y = 2; 
-	float z = 3; 
-	float c = 4; 
+	message IllumAtom{
+		float x = 1; 
+		float y = 2; 
+		float z = 3; 
+		float c = 4; 
+	}
+	repeated IllumAtom cmds = 1; 
 }
 message SimpleReq{
 	string msg = 1; 

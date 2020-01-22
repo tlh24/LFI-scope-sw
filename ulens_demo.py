@@ -22,14 +22,25 @@ def make_image(theta, imn):
 		response = stub.Clear(ulens_pb2.SimpleReq(msg="doit"))
 		print("Greeter client received: " + response.msg)
 		
+		req = ulens_pb2.IllumReq()
 		for j in range(6):
 			y = float(j) * 20.0 + 10.0
 			for i in range(19):
 				x = i * 10.0 + 10.0; 
 				z = (i-9.0) * math.sin(theta); 
-				stub.Illum(ulens_pb2.IllumReq(x=x,y=y,z=z,c=1.0))
+				cmd = req.cmds.add()
+				cmd.x = x
+				cmd.y = y
+				cmd.z = z
+				cmd.c = 1.0
 				if i != 9: #darken the central mode
-					stub.Illum(ulens_pb2.IllumReq(x=x,y=y,z=0.0,c=-0.75))
+					cmd = req.cmds.add()
+					cmd.x = x
+					cmd.y = y
+					cmd.z = z
+					cmd.c = -0.75
+					
+		stub.Illum(req)
 		
 		response = stub.Get(ulens_pb2.SimpleReq(msg="-"))
 		print("Get rx no ", imn, ": ", response.w, " ", response.h)
@@ -56,7 +67,7 @@ if is_windows:
 needhalt = False
 c = 'g'
 
-while c != b'q':
+while c != b'q' and c != 'q':
 	theta = 0.0
 	dtheta = math.pi * 2.0 / 25.0; 
 	for imn in range(n_images):

@@ -169,19 +169,19 @@ void enqueue_illuminate_voxel(float x, float y, float z, float c){
 		}
 		if(thread_active[h]) return; 
 	}
+	thread_active[h] = true; 
 	thread_args[h][0] = x; 
 	thread_args[h][1] = y; 
 	thread_args[h][2] = z; 
 	thread_args[h][3] = c; 
 	thread_args[h][4] = (float)h; 
-	thread_active[h] = true; 
 	
 	pthread_attr_t attr;
 	pthread_attr_init(&attr);
    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 	pthread_create(&threads[h], &attr, 
 						illuminate_voxel_thread, (void*)(&(thread_args[h]))); 
-
+	pthread_attr_destroy(&attr);
 	thread_next = (thread_next+1)%512; 
 }
 
@@ -250,8 +250,12 @@ using ulens::ImageReply;
 class IllumServiceImpl final : public Illuminate::Service {
 	Status Illum(ServerContext* context, const IllumReq* request, SimpleReply* reply) override {
 		printf("Illuminate!\t"); 
-		printf("x %f y %f z %f\n", request->x(), request->y(), request->z()); 
-		enqueue_illuminate_voxel(request->x(), request->y(), request->z(), request->c()); 
+		int n = request->cmds_size(); 
+		for(int i=0; i<n; i++){
+			ulens::IllumReq_IllumAtom req = request->cmds(i); 
+			printf("x %f y %f z %f\n", req.x(), req.y(), req.z()); 
+			enqueue_illuminate_voxel(req.x(), req.y(), req.z(), req.c()); 
+		}
 		reply->set_msg("Illum'd");
 		return Status::OK;
 	}
@@ -285,7 +289,14 @@ class IllumServiceImpl final : public Illuminate::Service {
 		}
 		// clear active in case of error.. e.g. overlap.
 		for(int i=0; i<512; i++){
+			if(thread_active[i]){
+				printf("thread_active[%d] =true\n", i); 
+			}
 			thread_active[i] = false; 
+			if(threads[i]){
+				pthread_join(threads[i], NULL); 
+				threads[i] = 0; 
+			}
 		}
 		reply->set_w(2560); 
 		reply->set_h(1600); 
