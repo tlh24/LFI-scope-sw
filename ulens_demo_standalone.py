@@ -2,10 +2,12 @@ import numpy as np
 from ALP4 import *
 import time
 from PIL import Image
-# import aggdraw
+import aggdraw
 import numpy
 import math
 import readchar
+
+is_windows = platform.system() == 'Windows'
 
 # microlens pitch = 100um; DMD pitch = 7.6um
 ulens_pitch_x = 13.165
@@ -36,13 +38,13 @@ def pixel_to_4d(px,py):
 
 # let's make a LUT to convert pix location to 4d. 
 # speed things up a bit. 
-p4d_array = []
-for py in range(1600):
-	for px in range(2560):
-		p4d_array.append(pixel_to_4d(px,py))
+#p4d_array = []
+#for py in range(1600):
+	#for px in range(2560):
+		#p4d_array.append(pixel_to_4d(px,py))
 
-def pixel_to_4d_cache(px,py):
-	return p4d_array[py*2560+px]
+#def pixel_to_4d_cache(px,py):
+	#return p4d_array[py*2560+px]
 
 def illuminate_voxel(x,y,z, draw_context, pen):
 	'''Illuminate a voxel.  x and y are microlens coordinates, 
@@ -79,44 +81,46 @@ def illuminate_voxel(x,y,z, draw_context, pen):
 
 # test_illumination()
 
-# Load the Vialux .dll
-DMD = ALP4(version = '4.3', libDir = 'C:/Program Files/ALP-4.3/ALP-4.3 API')
-# Initialize the device
-DMD.Initialize()
+if is_windows: 
+	# Load the Vialux .dll
+	DMD = ALP4(version = '4.3', libDir = 'C:/Program Files/ALP-4.3/ALP-4.3 API')
+	# Initialize the device
+	DMD.Initialize()
+	# Allocate the onboard memory for the image sequence
+	DMD.SeqAlloc(nbImg = 1, bitDepth = bitDepth)
 
 c = 'g'
 bitDepth = 8 
-# Allocate the onboard memory for the image sequence
-DMD.SeqAlloc(nbImg = 1, bitDepth = bitDepth)
 needhalt = False
-while c != b'q':
+while c != b'q' and c != 'q':
 	print("ulens_pitch_x:"+str(ulens_pitch_x)+" ulens_pitch_y:"+str(ulens_pitch_y))
 	print("ulens_phase_x:"+str(ulens_phase_x)+" ulens_phase_y:"+str(ulens_phase_y))
-	'''
+	
 	for nx in range(1):
 		for ny in range(1):
 			img = Image.new("L", (2560,1600), color='black') 
 			d = aggdraw.Draw(img)
 			pen = aggdraw.Pen("white", 1.8)
 			theta = (nx * 5 + ny)/25.0 * 2 * 3.1415926; 
-			phasey = math.cos(theta)*0.4 + ulens_phase_y
-			phasex = math.sin(theta)*0.4 + ulens_phase_x
+			phasey = ulens_phase_y # + math.cos(theta)*0.4
+			phasex = ulens_phase_x # + math.sin(theta)*0.4
 			for y in numpy.arange(phasey, 1600, ulens_pitch_y):
 				for x in numpy.arange(phasex, 2560, ulens_pitch_x):
-					d.line((x, y, x, y+1), pen)
+					l = math.sqrt((y-800)*(y-800) + (x-1280)*(x-1280))
+					if l < 900: # ignore the edges -- lower contrast. 
+						d.line((x, y, x, y+1), pen)
 			#also draw a square in the upper left corner. 
-			brush = aggdraw.Brush("black")
-			d.ellipse((1,1,20,20),pen,brush)
+			#brush = aggdraw.Brush("black")
+			#d.ellipse((1,1,20,20),pen,brush)
 			d.flush()
+			img.save('ulens_seq_0.png')
 			pix = numpy.array(img)
 			if ny == 0 and nx == 0:
 				imgSeq = pix.ravel()
 			else:
-				if ny == 1 and nx == 0:
-					img.save('ulens_seq_1.png')
 				imgSeq = numpy.append(imgSeq, pix.ravel())
-				'''
-	img = Image.new("L", (2560,1600), color='black')
+				
+	#img = Image.new("L", (2560,1600), color='black')
 	# d = aggdraw.Draw(img)
 	# pen = aggdraw.Pen("white", 1.7)
 	# for j in range(0,6):
@@ -129,27 +133,28 @@ while c != b'q':
 	# brush = aggdraw.Brush("white")
 	# d.ellipse((1,1,30,30),pen,brush)
 	# d.flush()
-	img.save('ulens_seq_1.png')
-	pix = numpy.array(img)
-	a = numpy.random.randint(0, 255)
-	pix = numpy.random.randint(0,a,2560*1600,np.dtype('u1'))
-	pix = numpy.reshape(pix, (1600, 2560)) # C-order, apparently.
-	image = Image.fromarray(pix.astype('uint8'), 'L')
-	image.save('ulens_seq_2.png')
-	#if True:
-	imgSeq = pix.ravel()
-	#else:
-	#	imgSeq = numpy.append(imgSeq, pix.ravel())
+	#img.save('ulens_seq_1.png')
+	#pix = numpy.array(img)
+	#a = numpy.random.randint(0, 255)
+	#pix = numpy.random.randint(0,a,2560*1600,np.dtype('u1'))
+	#pix = numpy.reshape(pix, (1600, 2560)) # C-order, apparently.
+	#image = Image.fromarray(pix.astype('uint8'), 'L')
+	#image.save('ulens_seq_2.png')
+	##if True:
+	#imgSeq = pix.ravel()
+	##else:
+	##	imgSeq = numpy.append(imgSeq, pix.ravel())
 
-	if needhalt:
-		DMD.Halt()
-	# Send the image sequence as a 1D list/array/numpy array
-	DMD.SeqPut(imgData = imgSeq.astype(int))
-	# Set image rate to 30 Hz
-	DMD.SetTiming(illuminationTime = 50000)
-
-	# Run the sequence in an infinite loop
-	DMD.Run()
+	if is_windows:
+		if needhalt:
+			DMD.Halt()
+		# Send the image sequence as a 1D list/array/numpy array
+		DMD.SeqPut(imgData = imgSeq.astype(int))
+		# Set image rate to 30 Hz
+		DMD.SetTiming(illuminationTime = 50000)
+		# Run the sequence in an infinite loop
+		DMD.Run()
+		
 	needhalt = True
 
 	print("x:stepx+0.01 s:stepx-0.01; c:stepy+0.01; d:stepy-0.01")
@@ -173,9 +178,10 @@ while c != b'q':
 	if c == b'v':
 		ulens_phase_y = ulens_phase_y - 1
 
-# Stop the sequence display
-DMD.Halt()
-# Free the sequence from the onboard memory
-DMD.FreeSeq()
-# De-allocate the device
-DMD.Free()
+if is_windows:
+	# Stop the sequence display
+	DMD.Halt()
+	# Free the sequence from the onboard memory
+	DMD.FreeSeq()
+	# De-allocate the device
+	DMD.Free()
