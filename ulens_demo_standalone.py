@@ -2,7 +2,7 @@ import numpy as np
 from ALP4 import *
 import time
 from PIL import Image
-import aggdraw
+#import aggdraw
 import numpy
 import math
 import readchar
@@ -12,8 +12,8 @@ is_windows = platform.system() == 'Windows'
 # microlens pitch = 100um; DMD pitch = 7.6um
 ulens_pitch_x = 13.165
 ulens_pitch_y = 13.165
-ulens_phase_x = ulens_pitch_x - 0.5 # specifies the center of the microlens.  
-ulens_phase_y = 7.5 # pixel here illuminates perpendicuarly. 
+ulens_phase_x = 9.5 # specifies the center of the microlens.  
+ulens_phase_y = 5.5 # pixel here illuminates perpendicuarly. 
 # lens is f/17, diameter 100um; this converts *normalized* sub-coordinates (+- 1.0) to radians.
 # but of course this is passed through hte microscope -- magnification!
 ulens_subpixel_to_angle = 0.4
@@ -81,44 +81,41 @@ def illuminate_voxel(x,y,z, draw_context, pen):
 
 # test_illumination()
 
+bitDepth = 8 
+nImage = 20
 if is_windows: 
 	# Load the Vialux .dll
 	DMD = ALP4(version = '4.3', libDir = 'C:/Program Files/ALP-4.3/ALP-4.3 API')
 	# Initialize the device
 	DMD.Initialize()
 	# Allocate the onboard memory for the image sequence
-	DMD.SeqAlloc(nbImg = 1, bitDepth = bitDepth)
+	DMD.SeqAlloc(nbImg = nImage, bitDepth = bitDepth)
 
 c = 'g'
-bitDepth = 8 
 needhalt = False
 while c != b'q' and c != 'q':
 	print("ulens_pitch_x:"+str(ulens_pitch_x)+" ulens_pitch_y:"+str(ulens_pitch_y))
 	print("ulens_phase_x:"+str(ulens_phase_x)+" ulens_phase_y:"+str(ulens_phase_y))
 	
-	for nx in range(1):
-		for ny in range(1):
-			img = Image.new("L", (2560,1600), color='black') 
-			d = aggdraw.Draw(img)
-			pen = aggdraw.Pen("white", 1.8)
-			theta = (nx * 5 + ny)/25.0 * 2 * 3.1415926; 
-			phasey = ulens_phase_y # + math.cos(theta)*0.4
-			phasex = ulens_phase_x # + math.sin(theta)*0.4
-			for y in numpy.arange(phasey, 1600, ulens_pitch_y):
-				for x in numpy.arange(phasex, 2560, ulens_pitch_x):
-					l = math.sqrt((y-800)*(y-800) + (x-1280)*(x-1280))
-					if l < 900: # ignore the edges -- lower contrast. 
-						d.line((x, y, x, y+1), pen)
-			#also draw a square in the upper left corner. 
-			#brush = aggdraw.Brush("black")
-			#d.ellipse((1,1,20,20),pen,brush)
-			d.flush()
+	for nx in range(nImage):
+		img = Image.new("L", (2560,1600), color='black') 
+		pixels = img.load()
+		theta = nx/20.0 * 2 * 3.1415926; 
+		phasey = ulens_phase_y # + math.sin(theta)*5.5f
+		phasex = ulens_phase_x + math.sin(theta)*5.5
+		for y in numpy.arange(phasey, 1600, ulens_pitch_y):
+			for x in numpy.arange(phasex, 2560, ulens_pitch_x):
+				l = math.sqrt((y-800)*(y-800) + (x-1280)*(x-1280))
+				if l < 600: # ignore the edges -- lower contrast. 
+					pixels[x,y] = 255
+
+		pix = numpy.array(img)
+		if nx == 0:
+			imgSeq = pix.ravel()
 			img.save('ulens_seq_0.png')
-			pix = numpy.array(img)
-			if ny == 0 and nx == 0:
-				imgSeq = pix.ravel()
-			else:
-				imgSeq = numpy.append(imgSeq, pix.ravel())
+		else:
+			imgSeq = numpy.append(imgSeq, pix.ravel())
+
 				
 	#img = Image.new("L", (2560,1600), color='black')
 	# d = aggdraw.Draw(img)
@@ -158,7 +155,7 @@ while c != b'q' and c != 'q':
 	needhalt = True
 
 	print("x:stepx+0.01 s:stepx-0.01; c:stepy+0.01; d:stepy-0.01")
-	print("a:phasex+1 z:phasex-1; f:phasey+1; v:phasey-1")
+	print("a:phasex+0.5 z:phasex-0.5; f:phasey+0.5; v:phasey-0.5")
 	c = readchar.readchar()
 	print(c)
 	if c == b'x':
@@ -170,13 +167,13 @@ while c != b'q' and c != 'q':
 	if c == b'd':
 		ulens_pitch_y = ulens_pitch_y - 0.01
 	if c == b'a':
-		ulens_phase_x = ulens_phase_x + 1
+		ulens_phase_x = ulens_phase_x + 0.5
 	if c == b'z':
-		ulens_phase_x = ulens_phase_x - 1
+		ulens_phase_x = ulens_phase_x - 0.5
 	if c == b'f':
-		ulens_phase_y = ulens_phase_y + 1
+		ulens_phase_y = ulens_phase_y + 0.5
 	if c == b'v':
-		ulens_phase_y = ulens_phase_y - 1
+		ulens_phase_y = ulens_phase_y - 0.5
 
 if is_windows:
 	# Stop the sequence display
